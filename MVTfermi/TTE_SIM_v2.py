@@ -596,7 +596,7 @@ def plot_gbm_lc(tte_total, tte_src, tte_bkgd,
     if output_info["combine_flag"]:
         base_title = f" LC {output_info['file_info']}"
         det_string = output_info.get('det_string')
-        print("Det in output_info:", det_string)
+        #print("Det in output_info:", det_string)
         final_title = f'Bn{trigger_number}, {det_string}, {angle} det,' + f"{base_title}\n{SNR_text}"
     else:
         base_title = f" LC {output_info['file_name']}"
