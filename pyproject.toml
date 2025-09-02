@@ -7,7 +7,6 @@ name = "mvtfermitools"
 version = "0.1.0"
 authors = [
   { name = "Suman Bala", email = "sbala@usra.edu" },
-  { name = "Narayana Bhat" }
 ]
 description = "A Python package for Minimum Variability Timescale (MVT) analysis, tailored for Fermi GBM data."
 readme = "README.md"
@@ -37,12 +36,17 @@ dependencies = [
   "matplotlib>=3.4",
   "pandas",
   "PyPDF2>=3.0.0",
+  "PyYAML",
   "termcolor",
   "sigfig",
   "requests",
-  "jupyter",
-  "notebook"
+  "tqdm"
 ]
+
+[project.optional-dependencies]
+dev = ["jupyter", "notebook"]
+ui = ["streamlit", "seaborn", "plotly"]
+
 
 [project.scripts]
 MVTfermi = "MVTfermi.mvt_parallel_fermi:mvtfermi_cli"

@@ -177,7 +177,7 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
     # <<< Define standard keys and defaults from your original script >>>
     ALL_PULSE_PARAMS = ['sigma', 'center_time', 'width', 'peak_time_ratio', 'start_time', 'rise_time', 'decay_time']
     DEFAULT_PARAM_VALUE = -999
-    STANDARD_KEYS = [
+    STANDARD_KEYS1 = [
         'sim_type', 'pulse_shape', 'peak_amplitude', 'bin_width_ms',
         'total_sim', 'successful_runs', 'failed_runs',
         'median_mvt_ms', 'mvt_err_lower', 'mvt_err_upper',
@@ -186,6 +186,27 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
         'mean_bkgd_counts', 'mean_src_counts', 'mean_back_avg',
         'S_flu', 'S16', 'S32', 'S64', 'S128', 'S256',
         'position'
+    ]
+
+    STANDARD_KEYS = [
+        # Core Parameters
+        'sim_type', 'pulse_shape', 'bin_width_ms', 'peak_amplitude', 'position', 'angle', 'trigger',
+        'sim_det', 'base_det', 'analysis_det', 'background_level',
+        # Run Summary
+        'total_sim', 'successful_runs', 'failed_runs',
+        # MVT Stats
+        'median_mvt_ms', 'mvt_err_lower', 'mvt_err_upper', 'all_median_mvt_ms', 'all_mvt_err_lower', 'all_mvt_err_upper',
+        # Mean Counts (from any analysis type)
+        'mean_src_counts', 'mean_bkgd_counts', 'mean_src_counts_total', 'mean_src_counts_template', 
+        'mean_src_counts_feature', 'mean_bkgd_counts_feature_local', 'mean_back_avg_cps',
+        # Fluence SNR (from any analysis type)
+        'S_flu', 'S_flu_total', 'S_flu_template', 'S_flu_feature_avg', 'S_flu_feature_local',
+        # Multi-timescale SNR (Total Pulse - simple runs will use this)
+        'S16', 'S32', 'S64', 'S128', 'S256',
+        # Multi-timescale SNR (Complex Pulse Breakdown)
+        'S16_total', 'S32_total', 'S64_total', 'S128_total', 'S256_total',
+        'S16_template', 'S32_template', 'S64_template', 'S128_template', 'S256_template',
+        'S16_feature', 'S32_feature', 'S64_feature', 'S128_feature', 'S256_feature',
     ]
 
     pulse_shape = base_params['pulse_shape']
@@ -381,6 +402,34 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
         except Exception as e:
             logging.error(f"Error creating MVT distribution plot for {param_dir.name} at bin width {bin_width}ms: {e}")
 
+
+
+        result_data = {**base_params,
+                       'bin_width_ms': bin_width,
+                       'total_sim': NN,
+                       'successful_runs': len(valid_runs),
+                       'failed_runs': len(detailed_df) - len(valid_runs),
+                       'median_mvt_ms': round(median_mvt, 4),
+                       'mvt_err_lower': round(median_mvt - p16, 4),
+                       'mvt_err_upper': round(p84 - median_mvt, 4),
+                       'all_median_mvt_ms': round(all_median_mvt, 4),
+                       'all_mvt_err_lower': round(all_median_mvt - all_p16, 4),
+                       'all_mvt_err_upper': round(all_p84 - all_median_mvt, 4),
+                       'sim_det': sim_params['det'],
+                       'base_det': base_dets,
+                       'analysis_det': analysis_det,
+                       'trigger': sim_params.get('trigger_number', 9999999),
+                       'angle': sim_params.get('angle', 0),
+                       'background_level': sim_params.get('background_level'),
+                       'position': base_params.get('position', 0)
+                       }
+
+        for col in valid_runs.columns:
+            if col.startswith(('S_flu', 'S1', 'S3', 'S6', 'bkgd_counts', 'src_counts', 'back_avg_cps')):
+                new_key = f'mean_{col}' if 'counts' in col or 'cps' in col else col
+                result_data[new_key] = round(valid_runs[col].mean(), 2)
+
+        # Dynamically average all metric columns that exist in the detailed_df
         #exit()
         # Build the standardized final output dictionary
         result_data = {
