@@ -37,7 +37,9 @@ WRAPPER_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), 'run_haar_power_mo
 def run_mvt_in_subprocess(
     counts: np.ndarray, 
     bin_width_s: float,
-    haar_python_path: str
+    haar_python_path: str,
+    doplot: int = 0,
+    file_name: str = "test"
 ) -> List:
     """
     Runs the haar_power_mod analysis in a separate Python environment.
@@ -69,7 +71,9 @@ def run_mvt_in_subprocess(
                 WRAPPER_SCRIPT_PATH,
                 "--input", tmp_input.name,
                 "--output", tmp_output.name,
-                "--min_dt", str(bin_width_s)
+                "--min_dt", str(bin_width_s),
+                "--doplot", str(doplot),
+                "--file", file_name
             ]
             
             # 3. Run the command

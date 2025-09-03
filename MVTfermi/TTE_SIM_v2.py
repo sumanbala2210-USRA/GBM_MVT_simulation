@@ -1893,7 +1893,7 @@ def GBM_MVT_analysis_complex(input_info: Dict, output_info: Dict):
 
             # Rename SNR dictionary keys to be unique
             #final_snr_dict = {f'{k}_total': v for k, v in snr_dict_total.items()}
-            final_snr_dict = {f'{k}': v for k, v in snr_dict_total.items()}
+            final_snr_dict = {f'{k}_total': v for k, v in snr_dict_total.items()}
             final_snr_dict.update({f'{k}_template': v for k, v in snr_dict_template.items()})
             final_snr_dict.update({f'{k}_feature': v for k, v in snr_dict_feature.items()})
 
@@ -1907,6 +1907,7 @@ def GBM_MVT_analysis_complex(input_info: Dict, output_info: Dict):
                 'S_flu_feature_avg': round(S_flu_feature_avg, 2), 'S_flu_feature_local': round(S_flu_feature_local, 2),
                 **final_snr_dict
             }
+
 
             #print(f"dets: {dets}")      
             if i == 1:

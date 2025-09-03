@@ -12,14 +12,22 @@ def main():
     parser.add_argument("--input", required=True, help="Path to the input .npy file for counts.")
     parser.add_argument("--output", required=True, help="Path to the output .json file for results.")
     parser.add_argument("--min_dt", required=True, type=float, help="Minimum timescale (bin width).")
+    parser.add_argument("--doplot", default='0', help="Whether to generate plots.")
+    parser.add_argument("--file", default="test", help="Base name for output files.")
+
     args = parser.parse_args()
 
     # 1. Load the input data
     counts = np.load(args.input)
     errors = np.sqrt(np.abs(counts))
 
+    if args.doplot == '1':
+        args.doplot = True
+    else:
+        args.doplot = False
+
     # 2. Run the analysis
-    results = haar_power_mod(counts, errors, min_dt=args.min_dt, doplot=False, afactor=-1.0, verbose=False)
+    results = haar_power_mod(counts, errors, min_dt=args.min_dt, doplot=args.doplot, afactor=-1.0, verbose=False, weight=True, file=args.file)
     plt.close('all')  # Close any plots if generated
 
     # 3. Save the results as a simple JSON file

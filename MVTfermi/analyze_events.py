@@ -177,7 +177,7 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
     # <<< Define standard keys and defaults from your original script >>>
     ALL_PULSE_PARAMS = ['sigma', 'center_time', 'width', 'peak_time_ratio', 'start_time', 'rise_time', 'decay_time']
     DEFAULT_PARAM_VALUE = -999
-    STANDARD_KEYS = [
+    STANDARD_KEYS1 = [
         'sim_type', 'pulse_shape', 'peak_amplitude', 'bin_width_ms',
         'total_sim', 'successful_runs', 'failed_runs',
         'median_mvt_ms', 'mvt_err_lower', 'mvt_err_upper',
@@ -188,7 +188,7 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
         'position'
     ]
 
-    STANDARD_KEYS1 = [
+    STANDARD_KEYS = [
         # Core Parameters
         'sim_type', 'pulse_shape', 'bin_width_ms', 'peak_amplitude', 'position', 'angle', 'trigger',
         'sim_det', 'base_det', 'analysis_det', 'background_level',
@@ -403,7 +403,6 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
             logging.error(f"Error creating MVT distribution plot for {param_dir.name} at bin width {bin_width}ms: {e}")
 
 
-        """
         result_data = {**base_params,
                        'bin_width_ms': bin_width,
                        'total_sim': NN,
@@ -428,14 +427,16 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
             if col.startswith(('S_flu', 'S1', 'S3', 'S6', 'bkgd_counts', 'src_counts', 'back_avg_cps')):
                 new_key = f'mean_{col}' if 'counts' in col or 'cps' in col else col
                 result_data[new_key] = round(valid_runs[col].mean(), 2)
-        """
 
+        """
         # Dynamically average all metric columns that exist in the detailed_df
         #exit()
         # Build the standardized final output dictionary
         result_data = {
-            **base_params, 'bin_width_ms': bin_width,
-            'total_sim': NN, 'successful_runs': len(valid_runs),
+            **base_params, 
+            'bin_width_ms': bin_width,
+            'total_sim': NN, 
+            'successful_runs': len(valid_runs),
             'failed_runs': len(detailed_df) - len(valid_runs),
             'median_mvt_ms': round(median_mvt, 4),
             'mvt_err_lower': round(median_mvt - p16, 4),
@@ -490,9 +491,12 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
             'position': base_params.get('position', 0)
         }
 
+        """
+    else:
+        pass
     final_dict = {}
     for key in STANDARD_KEYS:
-        final_dict[key] = result_data.get(key)
+        final_dict[key] = result_data.get(key, -999)
     
     # Add all possible pulse parameter keys, using the default value if a key is not in this run's result_data
     for key in ALL_PULSE_PARAMS:

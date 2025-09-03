@@ -69,7 +69,7 @@ pulse_definitions:
 simulation_campaigns:
 - name: GBM_Pulse_Simulation
   type: gbm
-  enabled: false
+  enabled: true
 
   # Parameters that vary for this entire campaign
   parameters:
@@ -106,10 +106,10 @@ simulation_campaigns:
 
 - name: FUNCTION_Pulse_Simulation
   type: function
-  enabled: true
+  enabled: false 
 
   parameters:
-    peak_amplitude:  [1, 2, 3, 4, 5, 10, 20, 50, 100, 200] #, 500]
+    peak_amplitude:  [1, 2] #, 3, 4, 5, 10, 20, 50, 100, 200] #, 500]
 
   constants:
     trigger_number: 99999999
@@ -121,11 +121,11 @@ simulation_campaigns:
     scale_factor: 1000
     random_seed: 37
     grid_resolution: 0.001
-    total_sim: 300
+    total_sim: 30
 
   # This campaign will only run the gaussian and norris simulations.
   pulses_to_run:
-    - gaussian
+    # - gaussian
     #- triangular  # Example of disabling a pulse for this campaign
     #- norris
     # - fred
