@@ -13,6 +13,7 @@ import shutil
 import yaml
 import logging
 import numpy as np
+import argparse
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -30,7 +31,7 @@ from sim_functions import constant
 
 
 # ========= USER SETTINGS =========
-MAX_WORKERS = os.cpu_count() - 2
+MAX_WORKERS = int(os.environ.get('SLURM_CPUS_PER_TASK', os.cpu_count() - 2))
 SIM_CONFIG_FILE = 'simulations_ALL.yaml' # Using the improved YAML
 MAIL_FILE = 'config_mail.yaml'
 
@@ -316,10 +317,10 @@ def generate_sim_tasks_from_config(config: Dict[str, Any], output_dir: 'Path') -
                 yield TaskClass(output_dir, current_variable_params, final_constants,  analysis_settings)
 
 # ========= MAIN EXECUTION BLOCK =========
-def main():
+def main(config_filepath: str):
     # Setup directories and logging
     now = datetime.now().strftime("%y_%m_%d-%H_%M")
-    with open(SIM_CONFIG_FILE, 'r') as f:
+    with open(config_filepath, 'r') as f:
         config = yaml.safe_load(f)
     data_path = Path(config['project_settings']['data_path'])
     #shutil.rmtree(data_path, ignore_errors=True)
@@ -350,4 +351,23 @@ def main():
     # You might want to send an email notification here
 
 if __name__ == '__main__':
-    main()
+    # Set up the command-line argument parser
+    parser = argparse.ArgumentParser(
+        description="Run MVT analysis based on a YAML configuration file."
+    )
+    # Add one argument: the path to the config file
+    parser.add_argument(
+        'config_file',
+        type=str,
+        # NEW: Make the argument optional and provide a default value
+        nargs='?',
+        default=SIM_CONFIG_FILE,
+        help="Path to the simulation YAML configuration file. "
+             f"Defaults to '{SIM_CONFIG_FILE}' if not provided."
+    )
+    
+    # Parse the arguments provided by the user from the command line
+    args = parser.parse_args()
+    
+    # Call the main function, passing in the path to the config file
+    main(args.config_file)

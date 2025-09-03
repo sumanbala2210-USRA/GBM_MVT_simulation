@@ -10,6 +10,7 @@ Suman Bala
 import os
 import yaml
 import logging
+import argparse
 import itertools
 import numpy as np
 import pandas as pd
@@ -29,7 +30,8 @@ from TTE_SIM_v2 import Function_MVT_analysis, print_nested_dict, check_param_con
 
 
 # ========= USER SETTINGS =========
-MAX_WORKERS = os.cpu_count() - 2
+#MAX_WORKERS = os.cpu_count() - 2
+MAX_WORKERS = int(os.environ.get('SLURM_CPUS_PER_TASK', os.cpu_count() - 2))
 SIM_CONFIG_FILE = 'simulations_ALL.yaml'
 RESULTS_FILE_NAME = "final_summary_results.csv"
 
@@ -507,9 +509,10 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
 
 
 # ========= MAIN EXECUTION BLOCK (REFACTORED FOR MEMORY STABILITY) =========
-def main():
+
+def main(config_filepath: str):
     now = datetime.now().strftime("%y_%m_%d-%H_%M")
-    with open(SIM_CONFIG_FILE, 'r') as f:
+    with open(config_filepath, 'r') as f:
         config = yaml.safe_load(f)
         
     data_path = Path(config['project_settings']['data_path'])
@@ -567,7 +570,26 @@ def main():
     #send_email(f"Analysis complete! Summary saved to:\n{final_results_csv_path}")
 
 if __name__ == '__main__':
-    main()
+    # Set up the command-line argument parser
+    parser = argparse.ArgumentParser(
+        description="Run MVT analysis based on a YAML configuration file."
+    )
+    # Add one argument: the path to the config file
+    parser.add_argument(
+        'config_file',
+        type=str,
+        # NEW: Make the argument optional and provide a default value
+        nargs='?',
+        default=SIM_CONFIG_FILE,
+        help="Path to the simulation YAML configuration file. "
+             f"Defaults to '{SIM_CONFIG_FILE}' if not provided."
+    )
+    
+    # Parse the arguments provided by the user from the command line
+    args = parser.parse_args()
+    
+    # Call the main function, passing in the path to the config file
+    main(args.config_file)
 
 
 """
