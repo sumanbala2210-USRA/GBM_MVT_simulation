@@ -6,9 +6,11 @@ Old: This script simulates light curves using Gaussian and triangular profiles.
 14th August 2025: Added GBM and normal functions together.
 
 """
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import os
 import glob
-import matplotlib.pyplot as plt
 import numpy as np
 import concurrent.futures
 import scipy.integrate as spi
@@ -17,7 +19,6 @@ import yaml  # Import the JSON library for parameter logging
 import warnings
 from astropy.io.fits.verify import VerifyWarning
 from typing import Dict, Any, Tuple, Optional
-import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable, Tuple
 import logging

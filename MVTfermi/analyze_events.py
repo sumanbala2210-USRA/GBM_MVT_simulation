@@ -7,6 +7,9 @@ Suman Bala
 """
 
 # ========= Import necessary libraries =========
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import os
 import yaml
 import logging
@@ -36,10 +39,10 @@ SIM_CONFIG_FILE = 'simulations_ALL.yaml'
 RESULTS_FILE_NAME = "final_summary_results.csv"
 
 
-                                
-def _create_task(base_path, params, settings, bin_width, haar_path, selections=None):
+
+def _create_task(sim_type, base_path, params, settings, bin_width, haar_path, selections=None):
     """Helper function to generate analysis tasks for different detector selections."""
-    if selections:
+    if selections and sim_type == 'gbm':
         for selection in selections:
             yield {
                 'param_dir_path': base_path,
@@ -118,7 +121,7 @@ def generate_analysis_tasks(config: Dict[str, Any]) -> 'Generator':
                         sys.exit(1)
 
                     for bin_width_ms in bin_widths_to_analyze_ms:
-                        yield from _create_task(template_dir_path, base_params, analysis_settings, bin_width_ms, haar_python_path, detector_selections)
+                        yield from _create_task(sim_type, template_dir_path, base_params, analysis_settings, bin_width_ms, haar_python_path, detector_selections)
             
             else: # --- STANDARD MODE for all other simple pulses ---
                 base_pulse_config = pulse_definitions.get(pulse_shape, {})
@@ -146,7 +149,7 @@ def generate_analysis_tasks(config: Dict[str, Any]) -> 'Generator':
                     
                     if param_dir_path.exists():
                         for bin_width_ms in bin_widths_to_analyze_ms:
-                            yield from _create_task(param_dir_path, base_params, analysis_settings, bin_width_ms, haar_python_path, detector_selections)
+                            yield from _create_task(sim_type, param_dir_path, base_params, analysis_settings, bin_width_ms, haar_python_path, detector_selections)
 
 
 
@@ -179,16 +182,6 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
     # <<< Define standard keys and defaults from your original script >>>
     ALL_PULSE_PARAMS = ['sigma', 'center_time', 'width', 'peak_time_ratio', 'start_time', 'rise_time', 'decay_time']
     DEFAULT_PARAM_VALUE = -999
-    STANDARD_KEYS1 = [
-        'sim_type', 'pulse_shape', 'peak_amplitude', 'bin_width_ms',
-        'total_sim', 'successful_runs', 'failed_runs',
-        'median_mvt_ms', 'mvt_err_lower', 'mvt_err_upper',
-        'all_median_mvt_ms', 'all_mvt_err_lower', 'all_mvt_err_upper',
-        'angle', 'sim_det', 'base_det', 'analysis_det', 'trigger','background_level',
-        'mean_bkgd_counts', 'mean_src_counts', 'mean_back_avg',
-        'S_flu', 'S16', 'S32', 'S64', 'S128', 'S256',
-        'position'
-    ]
 
     STANDARD_KEYS = [
         # Core Parameters
@@ -211,6 +204,17 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
         'S16_feature', 'S32_feature', 'S64_feature', 'S128_feature', 'S256_feature',
     ]
 
+
+    # ==================== START CHANGE 1 ====================
+    # If it's a complex pulse, dynamically add keys for the feature pulse parameters.
+    # This ensures they have a column in the final summary CSV.
+    if base_params['pulse_shape'] == 'complex_pulse':
+        extra_pulse_config = analysis_settings.get('extra_pulse', {})
+        # Create descriptive keys like 'sigma_feature', 'peak_amplitude_feature', etc.
+        feature_param_keys = [f"{key}_feature" for key in extra_pulse_config if key != 'pulse_shape']
+        STANDARD_KEYS.extend(feature_param_keys)
+    # ===================== END CHANGE 1 =====================
+
     pulse_shape = base_params['pulse_shape']
 
     ## ================== Directory Creation Logic ==================
@@ -219,6 +223,7 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
         # Assembly Mode: Name the output directory after the variable feature parameters.
         extra_pulse_config = analysis_settings.get('extra_pulse', {})
         feature_pulse_shape = extra_pulse_config.get('pulse_shape', 'extra')
+        feature_pulse_params = {k: v for k, v in extra_pulse_config.items() if k != 'pulse_shape'}
         variable_params_for_name = {
             'peak_amplitude': base_params['peak_amplitude'],
             'position': base_params.get('position', 0.0)
@@ -424,76 +429,20 @@ def analyze_one_group(task_info: Dict, data_path: Path, results_path: Path) -> L
                        'background_level': sim_params.get('background_level'),
                        'position': base_params.get('position', 0)
                        }
+        
+        # ==================== START CHANGE 2 ====================
+        # If it's a complex pulse, add the specific feature parameters to the summary.
+        # These will be picked up by the final loop because their keys were added to STANDARD_KEYS.
+        if result_data.get('pulse_shape') == 'complex_pulse':
+            extra_pulse_config = analysis_settings.get('extra_pulse', {})
+            feature_params_for_summary = {f"{key}_feature": val for key, val in extra_pulse_config.items() if key != 'pulse_shape'}
+            result_data.update(feature_params_for_summary)
 
         for col in valid_runs.columns:
-            if col.startswith(('S_flu', 'S1', 'S3', 'S6', 'bkgd_counts', 'src_counts', 'back_avg_cps')):
+            if col.startswith(('S_flu', 'S1', 's2', 'S3', 'S6', 'bkgd_counts', 'src_counts', 'back_avg_cps')):
                 new_key = f'mean_{col}' if 'counts' in col or 'cps' in col else col
                 result_data[new_key] = round(valid_runs[col].mean(), 2)
 
-        """
-        # Dynamically average all metric columns that exist in the detailed_df
-        #exit()
-        # Build the standardized final output dictionary
-        result_data = {
-            **base_params, 
-            'bin_width_ms': bin_width,
-            'total_sim': NN, 
-            'successful_runs': len(valid_runs),
-            'failed_runs': len(detailed_df) - len(valid_runs),
-            'median_mvt_ms': round(median_mvt, 4),
-            'mvt_err_lower': round(median_mvt - p16, 4),
-            'mvt_err_upper': round(p84 - median_mvt, 4),
-            'all_median_mvt_ms': round(all_median_mvt, 4),
-            'all_mvt_err_lower': round(all_median_mvt - all_p16, 4),
-            'all_mvt_err_upper': round(all_p84 - all_median_mvt, 4),
-            'mean_src_counts': round(valid_runs['src_counts'].mean(), 2),
-            'mean_bkgd_counts': round(valid_runs['bkgd_counts'].mean(), 2),
-            'S_flu': round(valid_runs['S_flu'].mean(), 2),
-            'S16': round(valid_runs['S16'].mean(), 2),
-            'S32': round(valid_runs['S32'].mean(), 2),
-            'S64': round(valid_runs['S64'].mean(), 2),
-            'S128': round(valid_runs['S128'].mean(), 2),
-            'S256': round(valid_runs['S256'].mean(), 2),
-            'mean_back_avg': round(valid_runs['back_avg_cps'].mean(), 2),
-            'background_level': round(sim_params['background_level'], 2),
-            'trigger': sim_params['trigger_number'],
-            'sim_det': sim_params['det'],
-            'base_det': base_dets,
-            'analysis_det': analysis_det,
-            'angle': sim_params.get('angle', 0),
-            'position': base_params.get('position', 0)
-        }
-    else:
-        logging.warning(f"Creating dummy row for {param_dir.name} at bin width {bin_width}ms due to insufficient valid runs ({len(valid_runs)}).")
-        result_data = {
-            **base_params, 'bin_width_ms': bin_width,
-            'total_sim': NN, 'successful_runs': len(valid_runs),
-            'failed_runs': len(detailed_df) - len(valid_runs),
-            'median_mvt_ms': -100,
-            'mvt_err_lower': -100,
-            'mvt_err_upper': -100,
-            'all_median_mvt_ms': -100,
-            'all_mvt_err_lower': -100,
-            'all_mvt_err_upper': -100,
-            'mean_src_counts': round(valid_runs['src_counts'].mean(), 2),
-            'mean_bkgd_counts': round(valid_runs['bkgd_counts'].mean(), 2),
-            'S_flu': round(valid_runs['S_flu'].mean(), 2),
-            'S16': round(valid_runs['S16'].mean(), 2),
-            'S32': round(valid_runs['S32'].mean(), 2),
-            'S64': round(valid_runs['S64'].mean(), 2),
-            'S128': round(valid_runs['S128'].mean(), 2),
-            'S256': round(valid_runs['S256'].mean(), 2),
-            'mean_back_avg': round(valid_runs['back_avg_cps'].mean(), 2),
-            'background_level': round(sim_params['background_level'], 2),
-            'trigger': sim_params['trigger_number'],
-            'sim_det': sim_params['det'],
-            'base_det': base_dets,
-            'analysis_det': analysis_det,
-            'angle': sim_params.get('angle', 0),
-            'position': base_params.get('position', 0)
-        }
-
-        """
     else:
         pass
     final_dict = {}

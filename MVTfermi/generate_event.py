@@ -8,6 +8,9 @@ Suman Bala
 """
 
 # ========= Import necessary libraries =========
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import os
 import shutil
 import yaml

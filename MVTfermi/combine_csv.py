@@ -5,13 +5,8 @@ from datetime import datetime
 now = datetime.now().strftime("%y_%m_%d-%H_%M")
 
 loc_dist = [
-    "run_25_08_25-07_23",
-    "run_25_08_25-08_34",
-    "run_25_08_25-08_58",
-    "run_25_08_25-10_32",
-    #"run_1em3_25_08_25-10_49",
-    "run_0.1_25_08_25-12_14",
-    "run_0.01_25_08_25-13_16"
+    "complex_gauss_1ms",
+    "run_1_25_09_03-19_05",
 ]
 
 path = os.path.join(os.getcwd(), "01_ANALYSIS_RESULTS")
@@ -26,7 +21,7 @@ for f in files:
     if os.path.exists(f):
         df = pd.read_csv(f)
         if "sigma" in df.columns:
-            df["sigma"] = df["sigma"] * 1000
+            df["sigma"] = df["sigma"] * 1#000
         dfs.append(df)
     else:
         print(f"Warning: File not found -> {f}")

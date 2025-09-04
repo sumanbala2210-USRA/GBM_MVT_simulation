@@ -18,7 +18,7 @@ project_settings:
 pulse_definitions:
   gaussian:
     parameters:
-      sigma: [0.05] #, 0.0001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
+      sigma: [0.01, 0.005, 0.02, 0.001] #, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
       #sigma: [0.05, 0.01] # [0.01, 0.05, 0.1, 0.5, 1.0]
     constants:
       center_time: 0.0
@@ -53,7 +53,7 @@ pulse_definitions:
   complex_pulse:
     parameters:
       # This is the second argument to your wrapper ('position')
-      position: [2.0, 3.0] #, 6.0]
+      position: [4.0, 6.0, 8.0, 10, 12, 14] #, 6.0]
     constants: {}
 
 # ===================================================================
@@ -69,7 +69,7 @@ pulse_definitions:
 simulation_campaigns:
 - name: GBM_Pulse_Simulation
   type: gbm
-  enabled: true
+  enabled: false
 
   # Parameters that vary for this entire campaign
   parameters:
@@ -89,7 +89,7 @@ simulation_campaigns:
     en_lo: 8.0
     en_hi: 900.0
     gbm_data_path: None
-    total_sim: 10
+    total_sim: 300
 
 
   # List the pulse shapes from the library you want to run in this campaign.
@@ -106,10 +106,10 @@ simulation_campaigns:
 
 - name: FUNCTION_Pulse_Simulation
   type: function
-  enabled: false 
+  enabled: true 
 
   parameters:
-    peak_amplitude:  [1, 2] #, 3, 4, 5, 10, 20, 50, 100, 200] #, 500]
+    peak_amplitude:  [1, 2, 3, 4, 5, 10, 20, 50] # 100, 200] #, 500]
 
   constants:
     trigger_number: 99999999
@@ -121,16 +121,16 @@ simulation_campaigns:
     scale_factor: 1000
     random_seed: 37
     grid_resolution: 0.001
-    total_sim: 30
+    total_sim: 300
 
   # This campaign will only run the gaussian and norris simulations.
   pulses_to_run:
     # - gaussian
-    #- triangular  # Example of disabling a pulse for this campaign
-    #- norris
+    # - triangular  # Example of disabling a pulse for this campaign
+    # - norris
     # - fred
     # - lognormal
-    # - complex_pulse  # Example of enabling a pulse for this campaign
+    - complex_pulse  # Example of enabling a pulse for this campaign
 
 # ===================================================================
 #  4. ANALYSIS SETTINGS
@@ -138,8 +138,8 @@ simulation_campaigns:
 # This section is read by your 'analyze.py' script.
 analysis_settings:
   # The analysis script will test every event file against these bin widths
-  bin_widths_to_analyze_ms: [1] #, 0.001] #, 0.001] #, 0.01]
+  bin_widths_to_analyze_ms: [1, 0.1] #, 0.001] #, 0.001] #, 0.01]
   snr_timescales: [0.010, 0.016, 0.032, 0.064, 0.128, 0.256]
-  detector_selections: [['n2', 'na'], ['all'] ] # [ ['n0'], ['n2', 'na'], ['all'] ]
-  extra_pulse: { pulse_shape: 'gaussian', sigma: 0.05, center_time: 0.0 }
+  #detector_selections: [['n2', 'na'], ['all'] ] # [ ['n0'], ['n2', 'na'], ['all'] ]
+  extra_pulse: { pulse_shape: 'gaussian', sigma: 0.02, center_time: 0.0 }
   #detector_selections: [ ['all'] ]
