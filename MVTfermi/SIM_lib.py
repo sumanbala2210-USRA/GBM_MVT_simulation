@@ -121,7 +121,7 @@ def convert_det_to_list(det_string):
     Converts a comma-separated string to a list,
     prepending 'n' to each element.
     """
-    det_val = 3 #10
+    det_val = 10
     all_dets = [f'n{i}' for i in range(det_val)] + ['na', 'nb']
     # 1. Split the input string into a list of smaller strings
     if isinstance(det_string, str) and det_string.lower() == 'all' :

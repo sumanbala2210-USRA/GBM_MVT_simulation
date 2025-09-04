@@ -69,11 +69,11 @@ pulse_definitions:
 simulation_campaigns:
 - name: GBM_Pulse_Simulation
   type: gbm
-  enabled: false
+  enabled: true
 
   # Parameters that vary for this entire campaign
   parameters:
-    peak_amplitude: [1, .5]
+    peak_amplitude: [0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
     all_flag: true
     trigger_set:
       - {trigger_number: 250709653, angle: 20, det: 'all', background_intervals: [[-20, -5.0],[75, 200]]}
@@ -94,7 +94,7 @@ simulation_campaigns:
 
   # List the pulse shapes from the library you want to run in this campaign.
   pulses_to_run:
-    # - gaussian
+    - gaussian
     # - triangular
     # - norris
     # - fred
@@ -106,7 +106,7 @@ simulation_campaigns:
 
 - name: FUNCTION_Pulse_Simulation
   type: function
-  enabled: true 
+  enabled: false 
 
   parameters:
     peak_amplitude:  [1, 2, 3, 4, 5, 10, 20, 50] # 100, 200] #, 500]
