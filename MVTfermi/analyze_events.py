@@ -480,15 +480,39 @@ def main(config_filepath: str):
     if not tasks:
         logging.warning("No existing simulation directories found to analyze.")
         return
+    
+    ## ================== NEW: Print Task Summary ==================
+    logging.info(f"Found {len(tasks)} analysis tasks to run.")
+    logging.info("--- Task Summary ---")
+    for i, task in enumerate(tasks):
+        bp = task['base_params']
+        pulse_shape = bp.get('pulse_shape', 'N/A')
+        
+        # Create a clean string of the key variable parameters
+        param_parts = []
+        key_params = ['peak_amplitude', 'position', 'sigma', 'width', 'rise_time', 'decay_time']
+        for key in key_params:
+            if key in bp:
+                param_parts.append(f"{key[:3]}={bp[key]}")
+        
+        param_str = ", ".join(param_parts)
+        
+        # Get detector and bin width info
+        det_str = f", dets={task.get('dets_to_analyze', 'default')}" if 'dets_to_analyze' in task else ""
+        bin_width_str = f"bin={task['bin_width_to_process_ms']}ms"
+        
+        logging.info(f"  {i+1: >4}: {pulse_shape:<15} ({param_str}, {bin_width_str}{det_str})")
+    logging.info("--------------------")
+    ## =============================================================
 
     logging.info(f"Found {len(tasks)} parameter sets to analyze. Starting parallel processing.")
-    
-    all_results = []
+
     
     # <<< NEW: Define a chunk size >>>
     # A good starting point is 2-4 times the number of workers.
     CHUNK_SIZE = MAX_WORKERS * 4 
 
+    final_results_csv_path = run_results_path / RESULTS_FILE_NAME
     # <<< NEW: Loop through the tasks in chunks >>>
     for i in range(0, len(tasks), CHUNK_SIZE):
         chunk = tasks[i:i + CHUNK_SIZE]
@@ -498,23 +522,22 @@ def main(config_filepath: str):
         # This creates a fresh set of workers for each chunk.
         with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {executor.submit(analyze_one_group, task, data_path, run_results_path) for task in chunk}
-            
+            logging.info(f"Processing {len(futures)} tasks...")
             for future in tqdm(as_completed(futures), total=len(chunk), desc="Analyzing Chunk"):
                 try:
                     result_list = future.result()
                     if result_list:
-                        all_results.extend(result_list)
+                        # Create a DataFrame for just this one result
+                        result_df = pd.DataFrame(result_list)
+
+                        # Check if the CSV file already exists to decide whether to write the header
+                        header = not final_results_csv_path.exists()
+                    
+                        # Append this one result to the CSV file
+                        result_df.to_csv(final_results_csv_path, index=False, mode='a', header=header)
                 except Exception as e:
                     logging.error(f"An analysis task failed in the pool: {e}", exc_info=True)
-
-    # --- Save Final Summary ---
-    if all_results:
-        final_df = pd.DataFrame(all_results)
-        final_results_csv_path = run_results_path / RESULTS_FILE_NAME
-        final_df.to_csv(final_results_csv_path, index=False)
         logging.info(f"✅ Analysis complete! Summary saved to:\n{final_results_csv_path}")
-    else:
-        logging.info("Analysis complete, but no results were generated.")
 
     #send_email(f"Analysis complete! Summary saved to:\n{final_results_csv_path}")
 
