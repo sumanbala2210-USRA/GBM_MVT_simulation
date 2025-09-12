@@ -62,8 +62,8 @@ def time_resolved_mvt(
         
         try:
             result = haar_power_mod(window_counts, window_errors, min_dt=min_dt, **kwargs)
-            mvt = result[2]
-            mvt_err = result[3]
+            mvt = round(result[2]*1000, 3)
+            mvt_err = round(result[3]*1000, 3)
         except Exception as e:
             mvt = 0.0
             mvt_err = 0.0
@@ -73,8 +73,8 @@ def time_resolved_mvt(
             'center_time_s': window_center_time,
             'start_time_s': window_start_time,
             'end_time_s': window_end_time,
-            'mvt_s': mvt,
-            'mvt_err_s': mvt_err,
+            'mvt_ms': mvt,
+            'mvt_err_ms': mvt_err,
         })
             
         start_bin += step_size_bins
@@ -124,7 +124,7 @@ def main():
         )
     else:
         print("--- Running Standard MVT ---")
-        results = haar_power_mod(
+        mvt_results = haar_power_mod(
             counts, 
             errors, 
             min_dt=args.min_dt, 
@@ -134,7 +134,10 @@ def main():
             weight=True, 
             file=args.file
         )
-    
+        mvt_val = round(mvt_results[2] * 1000, 3)  
+        mvt_err = round(mvt_results[3] * 1000, 3)  
+        results = {'mvt_ms': mvt_val, 'mvt_err_ms': mvt_err}
+
     plt.close('all')
 
     # 3. Save the results

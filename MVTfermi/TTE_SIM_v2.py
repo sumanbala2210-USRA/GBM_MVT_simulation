@@ -1012,8 +1012,8 @@ def Function_MVT_analysis(input_info: Dict,
                             haar_python_path=haar_python_path
                         )
             plt.close('all')
-            mvt_val = float(mvt_res[2]) * 1000
-            mvt_err = float(mvt_res[3]) * 1000
+            mvt_val = mvt_res['mvt_ms']
+            mvt_err = mvt_res['mvt_err_ms']
 
 
             iter_detail = {**base_iter_detail,
@@ -1157,9 +1157,9 @@ def Function_MVT_analysis_complex(input_info: Dict, output_info: Dict):
             bins = np.arange(sim_params['t_start'], sim_params['t_stop'] + bin_width_s, bin_width_s)
             counts, _ = np.histogram(total_events, bins=bins)
             mvt_res = run_mvt_in_subprocess(counts=counts, bin_width_s=bin_width_s, haar_python_path=haar_python_path)
-            
-            mvt_val = float(mvt_res[2]) * 1000 if mvt_res else -100
-            mvt_err = float(mvt_res[3]) * 1000 if mvt_res else -200
+
+            mvt_val = mvt_res['mvt_ms'] if mvt_res else -100
+            mvt_err = mvt_res['mvt_err_ms'] if mvt_res else -200
 
             iteration_results.append({ **base_iter_detail, 'analysis_bin_width_ms': bin_width_ms, 'mvt_ms': round(mvt_val, 4), 'mvt_err_ms': round(mvt_err, 4), **base_params })
 
@@ -1623,8 +1623,8 @@ def GBM_MVT_analysis_det(input_info: Dict,
                                             bin_width_s=bin_width_s,
                                             haar_python_path=haar_python_path)
             plt.close('all')
-            mvt_val = float(mvt_res[2]) * 1000
-            mvt_err = float(mvt_res[3]) * 1000
+            mvt_val = mvt_res['mvt_ms']
+            mvt_err = mvt_res['mvt_err_ms']
         except Exception as e:
             print(f"Error during MVT calculation for bin width {bin_width_ms} ms: {e}")
             mvt_val = -100
@@ -1798,8 +1798,8 @@ def GBM_MVT_analysis_complex(input_info: Dict,
                                             bin_width_s=bin_width_s,
                                             haar_python_path=haar_python_path)
             plt.close('all')
-            mvt_val = float(mvt_res[2]) * 1000
-            mvt_err = float(mvt_res[3]) * 1000
+            mvt_val = mvt_res['mvt_ms']
+            mvt_err = mvt_res['mvt_err_ms']
         except Exception as e:
             print(f"Error during MVT calculation for bin width {bin_width_ms} ms: {e}")
             mvt_val = -100
@@ -2015,8 +2015,8 @@ def GBM_MVT_analysis_complex(input_info: Dict,
                                             bin_width_s=bin_width_s,
                                             haar_python_path=haar_python_path)
             plt.close('all')
-            mvt_val = float(mvt_res[2]) * 1000
-            mvt_err = float(mvt_res[3]) * 1000
+            mvt_val = mvt_res['mvt_ms']
+            mvt_err = mvt_res['mvt_err_ms']
         except Exception as e:
             print(f"Error during MVT calculation for bin width {bin_width_ms} ms: {e}")
             mvt_val = -100
@@ -2217,8 +2217,8 @@ def GBM_MVT_analysis_complex(input_info: Dict, output_info: Dict):
             phaii = tte_total.to_phaii(bin_by_time, bin_width_ms / 1000.0)
             data = phaii.to_lightcurve(energy_range=energy_range_nai)
             mvt_res = run_mvt_in_subprocess(data.counts, bin_width_s=bin_width_ms / 1000.0, haar_python_path=haar_python_path)
-            mvt_val = float(mvt_res[2]) * 1000 if mvt_res else -100
-            mvt_err = float(mvt_res[3]) * 1000 if mvt_res else -200
+            mvt_val = mvt_res['mvt_ms'] if mvt_res else -100
+            mvt_err = mvt_res['mvt_err_ms'] if mvt_res else -200
 
             iteration_results.append({ **base_iter_detail, 'analysis_bin_width_ms': bin_width_ms, 'mvt_ms': round(mvt_val, 4), 'mvt_err_ms': round(mvt_err, 4), **base_params })
 
