@@ -9,14 +9,10 @@ Suman Bala
 import os
 
 import numpy as np
-from pathlib import Path
-from tqdm import tqdm
+
 import yaml
 import logging
 import smtplib
-import itertools
-import pandas as pd
-from typing import Dict, Any
 from email.message import EmailMessage
 import subprocess
 import json
@@ -34,7 +30,9 @@ GMAIL_FILE = 'config_mail.yaml'
 WRAPPER_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), 'run_haar_power_mod.py')
 
 
-def run_mvt_in_subprocess(
+
+
+def run_mvt_in_subprocess_old(
     counts: np.ndarray, 
     bin_width_s: float,
     haar_python_path: str,
@@ -95,6 +93,74 @@ def run_mvt_in_subprocess(
             return []
         
 
+
+def run_mvt_in_subprocess(
+    counts: np.ndarray,
+    bin_width_s: float,
+    haar_python_path: str,
+    file_name: str = "test",
+    doplot: int = 0,
+    time_resolved: bool = False,
+    window_size_s: float = 1.0,
+    step_size_s: float = 1.0
+) -> List:
+    """
+    Runs the MVT analysis in a separate Python environment for either a standard
+    or a time-resolved calculation.
+
+    Args:
+        counts (np.ndarray): The binned light curve data.
+        bin_width_s (float): The bin width in seconds.
+        haar_python_path (str): The full path to the Python executable.
+        file_name (str): Base name for output files. Defaults to "test".
+        doplot (int): Whether to generate plots. Defaults to 0.
+        time_resolved (bool): If True, performs time-resolved analysis. Defaults to False.
+        window_size_s (float): Window size in seconds for time-resolved mode.
+        step_size_s (float): Step size in seconds for time-resolved mode.
+
+    Returns:
+        List: The results from the analysis.
+    """
+    with tempfile.NamedTemporaryFile(suffix='.npy') as tmp_input, \
+         tempfile.NamedTemporaryFile(suffix='.json', mode='w+') as tmp_output:
+
+        try:
+            # 1. Save the input data
+            np.save(tmp_input.name, counts)
+
+            # 2. Construct the base command
+            command = [
+                haar_python_path,
+                WRAPPER_SCRIPT_PATH,
+                "--input", tmp_input.name,
+                "--output", tmp_output.name,
+                "--min_dt", str(bin_width_s),
+                "--doplot", str(doplot),
+                "--file", file_name
+            ]
+
+            # 3. Conditionally add arguments for time-resolved analysis
+            if time_resolved:
+                command.extend([
+                    "--time-resolved",
+                    "--window-size", str(window_size_s), # Must be a string for the command line
+                    "--step-size", str(step_size_s)      # Must be a string for the command line
+                ])
+
+            # 4. Run the command
+            subprocess.run(command, check=True, capture_output=True, text=True)
+
+            # 5. Load and return the results
+            tmp_output.seek(0)
+            mvt_res = json.load(tmp_output)
+            return mvt_res
+
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Subprocess for MVT calculation failed. Stderr: {e.stderr}")
+            return []
+        except Exception as e:
+            logging.error(f"An unexpected error occurred in run_mvt_in_subprocess: {e}")
+            return []
 
 
 def send_email(input='!!'):

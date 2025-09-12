@@ -27,6 +27,10 @@ import pandas as pd
 import re
 from typing import List
 
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
 # --- GDT Core Imports ---
 from gdt.core.binning.unbinned import bin_by_time
 from gdt.core.plot.lightcurve import Lightcurve
@@ -308,9 +312,9 @@ def calculate_adaptive_simulation_params(pulse_shape: str, params: Dict) -> Dict
         fall_duration = width * (1.0 - peak_ratio)
         grid_res = min(rise_duration, fall_duration) / 10.0
         # Start and stop are explicitly defined by the parameters
-        t_start = center - (width * peak_ratio) - padding * grid_res * 20
+        t_start = center - (width * peak_ratio) - padding * grid_res * 5
         #t_stop = t_start + width + padding + (padding*2)
-        t_stop = t_start + width + padding * grid_res * 20
+        t_stop = center + width * (1.0 - peak_ratio) + padding * grid_res * 5
         # Narrowest feature is the shorter of the rise or fall time
     
     elif pulse_shape == 'complex_pulse':
@@ -322,7 +326,7 @@ def calculate_adaptive_simulation_params(pulse_shape: str, params: Dict) -> Dict
     # Ensure grid resolution is within reasonable bounds to prevent memory errors
     # or inaccurate simulations.
     if grid_res is not None:
-        grid_res = np.clip(grid_res, a_min=1e-6, a_max=0.001) # e.g., 1µs to 1ms
+        grid_res = np.clip(grid_res, a_min=1e-7, a_max=0.001) # e.g., 1µs to 1ms
     else:
         # Fallback for unknown shapes
         t_start, t_stop, grid_res = -5.0, 5.0, 0.0001
@@ -521,6 +525,192 @@ def create_final_plot(
         pass
         #logging.error(f"Failed to generate representative plot. Error: {e}")
 
+
+
+def create_final_plot_with_MVT_number(
+    source_events: np.ndarray,
+    background_events: np.ndarray,
+    model_info: Dict,
+    output_info: Dict,
+    mvt_summary_df: pd.DataFrame = None
+):
+    """
+    Creates a final plot showing a colorful, decomposed light curve and
+    overlays the time-resolved MVT results with horizontal error bars
+    representing the calculation window.
+    """
+    try:
+        # --- 1. Unpack data and parameters ---
+        params = model_info['base_params']
+        # <<< CHANGE: Get the MVT window size from model_info >>>
+        mvt_window_size_s = model_info.get('mvt_window_size_s', 1.0) # Default to 1.0s if not provided
+        
+        fig_name = output_info['file_path'] / f"LC_with_MVT_{output_info['file_info']}.png"
+        base_title = f"LC & MVT: {output_info['file_info']}"
+        t_start, t_stop = params['t_start'], params['t_stop']
+        
+        # ... (Light curve data preparation is unchanged) ...
+        total_events = np.sort(np.concatenate([source_events, background_events]))
+        bin_width = params.get('bin_width_for_plot', 0.01)
+        bins = np.arange(t_start, t_stop + bin_width, bin_width)
+        times = bins[:-1] + bin_width / 2.0
+        total_counts, _ = np.histogram(total_events, bins=bins)
+        source_only_counts, _ = np.histogram(source_events, bins=bins)
+        
+        # --- 3. Create the Plot ---
+        plt.style.use('seaborn-v0_8-ticks')
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        # ... (Plotting the light curve is unchanged) ...
+        plot_data = [
+            {'x': times, 'y': total_counts, 'label': 'Total Signal', 'color': 'rosybrown', 'fill_alpha': 0.7},
+            {'x': times, 'y': source_only_counts, 'label': 'Source Signal', 'color': 'darkgreen', 'fill_alpha': 0.5}
+        ]
+        for data in plot_data:
+            ax.step(data['x'], data['y'], where='mid', label=data.get('label'), color=data.get('color'), lw=1.5)
+            if 'fill_alpha' in data:
+                ax.fill_between(data['x'], data['y'], step="mid", color=data.get('color'), alpha=data.get('fill_alpha'))
+        ax.set_title(base_title, fontsize=12)
+        ax.set_xlabel("Time (s)", fontsize=12)
+        ax.set_ylabel(f"Counts per {bin_width*1000:.1f} ms Bin", fontsize=12, color='black')
+        ax.tick_params(axis='y', labelcolor='black')
+        ax.set_xlim(t_start, t_stop)
+        ax.set_ylim(bottom=0)
+
+        # --- 4. Overlay MVT data ---
+        if mvt_summary_df is not None and not mvt_summary_df.empty:
+            ax2 = ax.twinx()
+            
+            filtered_mvt_df = mvt_summary_df[mvt_summary_df['median_mvt_ms'] > 0]
+            x_mvt = filtered_mvt_df['center_time_s']
+            y_mvt = filtered_mvt_df['median_mvt_ms']
+            y_err = [
+                filtered_mvt_df['mvt_err_lower_ms'],
+                filtered_mvt_df['mvt_err_upper_ms']
+            ]
+            # <<< CHANGE: Define the horizontal error bar width >>>
+            # The error bar radius is half the total window size.
+            x_err = mvt_window_size_s / 2.0
+            
+            # <<< CHANGE: Add 'xerr' to the errorbar call >>>
+            ax2.errorbar(x_mvt, y_mvt, yerr=y_err, xerr=x_err,
+                         fmt='o', color='firebrick', label='Median MVT (68% C.I.)',
+                         capsize=4, markersize=6, lw=1.5, zorder=10)
+            
+            ax2.set_ylabel("MVT (ms)", fontsize=12, color='firebrick')
+            ax2.tick_params(axis='y', labelcolor='firebrick')
+            ax2.set_yscale("log")
+            
+            lines, labels = ax.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax.legend(lines + lines2, labels + labels2, loc='upper right')
+
+        else:
+            ax.legend(loc='upper right')
+        
+        fig.tight_layout()
+        plt.savefig(fig_name, dpi=300)
+        plt.close(fig)
+
+    except Exception as e:
+        logging.error(f"Failed to generate final plot with MVT. Error: {e}")
+        pass
+
+
+def create_final_plot_with_MVT(
+    source_events: np.ndarray,
+    background_events: np.ndarray,
+    model_info: Dict,
+    output_info: Dict,
+    mvt_summary_df: pd.DataFrame = None
+):
+    """
+    Creates a final plot showing a colorful, decomposed light curve and
+    overlays the time-resolved MVT results, color-coded by the
+    success percentage of simulation runs.
+    """
+    try:
+        # --- Unpack data and parameters ---
+        params = model_info['base_params']
+        mvt_window_size_s = model_info.get('mvt_window_size_s', 1.0)
+        # Use the passed-in output_info to name the new plot
+        #fig_name = "test_mvt_LC.png"
+        fig_name = Path(output_info['file_path']) / f"LC_with_MVT_{output_info['file_info']}.png"
+        base_title = f"LC & MVT: {output_info['file_info']}"
+        t_start, t_stop = params['t_start'], params['t_stop']
+
+        # --- Prepare Light Curve Data ---
+        total_events = np.sort(np.concatenate([source_events, background_events]))
+        bin_width = params.get('bin_width_for_plot', 0.01)
+        bins = np.arange(t_start, t_stop + bin_width, bin_width)
+        times = bins[:-1] + bin_width / 2.0
+        total_counts, _ = np.histogram(total_events, bins=bins)
+        source_only_counts, _ = np.histogram(source_events, bins=bins)
+
+        # --- Create the Plot ---
+        plt.style.use('seaborn-v0_8-ticks')
+        fig, ax = plt.subplots(figsize=(13, 7))
+
+        plot_data = [
+            {'x': times, 'y': total_counts, 'label': 'Total Signal', 'color': 'rosybrown', 'fill_alpha': 0.2},
+            {'x': times, 'y': source_only_counts, 'label': 'Source Signal', 'color': 'green', 'fill_alpha': 0.3}
+        ]
+        for data in plot_data:
+            ax.step(data['x'], data['y'], where='mid', label=data.get('label'), color=data.get('color'), lw=0.1, zorder=1)
+            if 'fill_alpha' in data:
+                ax.fill_between(data['x'], data['y'], step="mid", color=data.get('color'), alpha=data.get('fill_alpha'))
+        ax.set_title(base_title, fontsize=12)
+        ax.set_xlabel("Time (s)", fontsize=12)
+        ax.set_ylabel(f"Counts per {bin_width*1000:.1f} ms Bin", fontsize=12)
+        ax.set_xlim(t_start, t_stop)
+        ax.set_ylim(bottom=0)
+
+        # --- Overlay MVT data ---
+        if mvt_summary_df is not None and not mvt_summary_df.empty:
+            ax2 = ax.twinx()
+            filtered_mvt_df = mvt_summary_df[mvt_summary_df['median_mvt_ms'] > 0].copy()
+            x_err = mvt_window_size_s / 2.0
+            filtered_mvt_df['success_percent'] = (filtered_mvt_df['successful_runs'] / filtered_mvt_df['total_runs_at_step']) * 100
+
+            if not filtered_mvt_df.empty:
+                norm = mcolors.Normalize(vmin=0, vmax=100)
+                
+                # ***** THIS IS THE LINE TO EXPERIMENT WITH *****
+                cmap = cm.get_cmap('binary') # Try 'plasma', 'cividis', 'gray_r', etc.'OrRd'
+                #mcmap = cm.get_cmap('binary') #  cm.get_cmap('OrRd')
+
+                for index, row in filtered_mvt_df.iterrows():
+                    if index == 0:
+                        x_err = row['center_time_s'] - row['start_time_s']
+                    color = cmap(norm(row['success_percent']))
+                    #mcolor = mcmap(norm(row['success_percent']))
+
+                    ax2.errorbar(x=row['center_time_s'], y=row['median_mvt_ms'],
+                                 yerr=[[row['mvt_err_lower_ms']], [row['mvt_err_upper_ms']]], xerr=x_err,
+                                 fmt='o', color=color, capsize=4, markersize=6, lw=1.5, zorder=10)
+
+                mappable = cm.ScalarMappable(norm=norm, cmap=cmap)
+                cbar = fig.colorbar(mappable, ax=ax2, pad=0.08, aspect=30)
+                cbar.set_label(f'Success Rate [{filtered_mvt_df["total_runs_at_step"][1]}] (%)', fontsize=12)
+
+            ax2.set_ylabel("MVT (ms)", fontsize=12)
+            ax2.tick_params(axis='y')
+            ax2.set_yscale("log")
+            ax.legend(loc='upper left')
+        else:
+            ax.legend(loc='upper right')
+        
+        fig.tight_layout()
+        
+        plt.savefig(fig_name, dpi=300)
+        #plt.show()
+        plt.close(fig)
+        
+        print(f"Plot saved to: {fig_name}")
+
+    except Exception as e:
+        logging.error(f"Failed to generate plot. Error: {e}", exc_info=True)
+        pass
 
 
 
@@ -851,208 +1041,6 @@ def Function_MVT_analysis(input_info: Dict,
 
 
 
-def Function_MVT_analysis_complex(input_info: Dict,
-                           output_info: Dict):
-    #params = input_info['base_params']
-
-    sim_data_path = input_info['sim_data_path']
-    haar_python_path = input_info['haar_python_path']
-    analysis_settings = input_info['analysis_settings']
-    base_params = input_info['base_params']
-
-    src_event_files = sorted(sim_data_path.glob('*_src.npz'))
-    back_event_files = sorted(sim_data_path.glob('*_bkgd.npz'))
-    if not src_event_files or not back_event_files:
-        logging.error(f"No source or background event files found in {sim_data_path}")
-
-    sim_params_file = input_info['sim_par_file']
-
-    if type(sim_params_file) is dict:
-        sim_params = sim_params_file
-    else:
-        sim_params = yaml.safe_load(open(sim_params_file, 'r'))
-
-
-
-
-
-    # Get parameters for the feature pulse for this specific run
-    feature_amplitude = base_params['peak_amplitude']
-    position_shift = base_params['position']
-    
-    # Get the configuration for the extra pulse from the analysis settings
-    extra_pulse_config = analysis_settings.get('extra_pulse')
-    if not extra_pulse_config:
-        logging.error("Assembly Error: 'extra_pulse' configuration is missing in analysis_settings of YAML.")
-        return [], 0
-    feature_shape = extra_pulse_config.get('pulse_shape')
-
-    # --- 2. Dynamically find the pre-generated feature data directory ---
-    feature_params_for_naming = {
-        'peak_amplitude': feature_amplitude,
-        **{k: v for k, v in extra_pulse_config.items() if k != 'pulse_shape'}
-    }
-
-    data_path_root = input_info['sim_data_path'].parents[2]
-    feature_dir_name = _create_param_directory_name('function', feature_shape, feature_params_for_naming)
-    feature_dir_path = data_path_root / 'function' / feature_shape / feature_dir_name
-    feature_event_files = sorted(feature_dir_path.glob('*_src.npz'))
-
-    if not feature_dir_path.exists():
-        logging.error(f"Assembly Error: Feature data directory not found at {feature_dir_path}")
-        return [], 0
-
-    # --- 3. Load event data from BOTH template and feature files ---
-    try:
-        data_src = np.load(src_event_files[0], allow_pickle=True)
-        data_back = np.load(back_event_files[0], allow_pickle=True)
-        data_feature = np.load(feature_event_files[0], allow_pickle=True)
-
-        source_event_realizations_all = data_src['realizations']
-        background_event_realizations = data_back['realizations']
-        feature_event_realizations = data_feature['realizations']
-    except (FileNotFoundError, IndexError) as e:
-        logging.error(f"Error loading source/background files for assembly: {e}")
-        return [], 0
-
-    #extra_pulse =  np.load(extra_pulse_event_files[0], allow_pickle=True)
-    #sim_params = data_src['params'].item()
-    
-    background_level = sim_params['background_level']
-    scale_factor = sim_params['scale_factor']
-  
-
-    t_start = sim_params['t_start']
-    t_stop = sim_params['t_stop']
-    det = sim_params.get('det', 'nn')
-    angle = sim_params.get('angle', 0)
-   
-    
-    NN_analysis = base_params['num_analysis']
-    snr_timescales = analysis_settings.get('snr_timescales', [0.010, 0.016, 0.032, 0.064, 0.128])
-    bin_width_ms = input_info['bin_width_ms']
-
-
-
-    sim_params = data_src['params'].item()
-    
-    #background_level = sim_params['background_level']
-    #scale_factor = sim_params['scale_factor']
-
-    #background_level_cps = background_level * scale_factor
-    src_start, src_stop = calculate_src_interval(sim_params)
-    src_duration = src_stop - src_start
-
-    duration = sim_params['t_stop'] - sim_params['t_start']
-
-    iteration_results = []
-    
-
-    NN = len(source_event_realizations_all)
-    NN_back = len(background_event_realizations)
-    if NN != NN_back:
-        logging.warning(f"Mismatch in realization counts: {NN} (source) vs {NN_back} (background)")
-        return []
-    if NN < NN_analysis:
-        logging.warning(f"Insufficient realizations: {NN} (source) < {NN_analysis} (required)")
-        return []
-    
-    if NN_analysis < NN:
-        source_event_realizations = source_event_realizations_all[:NN_analysis]
-        NN = NN_analysis
-    else:
-        source_event_realizations = source_event_realizations_all
-
-    for i, source_events in enumerate(source_event_realizations):
-        try:
-            background_events = background_event_realizations[i]
-            feature_events = feature_event_realizations[i] + position_shift
-            complete_src_events = np.sort(np.concatenate([source_events, feature_events]))
-            total_events = np.sort(np.concatenate([source_events, background_events, feature_events]))
-            iteration_seed = sim_params['random_seed'] + i
-
-            total_src_counts = len(source_events) 
-            total_bkgd_counts = len(background_events)
-            total_feature_counts = len(feature_events)
-
-            background_level_cps = total_bkgd_counts / duration
-            background_counts = background_level_cps * src_duration
-            try:
-                snr_fluence = total_src_counts / np.sqrt(background_counts)
-            except ZeroDivisionError:
-                snr_fluence = 0
-            #snr_fluence = total_src_counts / sigma_bkgd_counts
-            # Calculate per-realization metrics that are independent of bin width
-            total_counts_fine, _ = np.histogram(total_events, bins=int(duration / 0.001))
-            snr_dict = _calculate_multi_timescale_snr(
-                total_counts=total_counts_fine, sim_bin_width=0.001,
-                back_avg_cps=background_level_cps,
-                search_timescales=snr_timescales
-            )
-
-            base_iter_detail = {
-                'iteration': i + 1,
-                'random_seed': iteration_seed,
-                'back_avg_cps': round(background_level_cps, 2),
-                'bkgd_counts': int(background_counts),
-                'src_counts': total_src_counts,
-                'S_flu': round(snr_fluence, 2),
-                **snr_dict,
-            }
-
-            if i == 1:
-                create_final_plot(source_events=complete_src_events,
-                                  background_events=background_events,
-                                    model_info={
-                                        'func': None,
-                                        'func_par': None,
-                                        'base_params': sim_params,
-                                        'snr_analysis': snr_timescales
-                                    },
-                                    output_info= output_info
-                                )
-
-            # Loop through analysis bin width
-            bin_width_s = bin_width_ms / 1000.0
-            bins = np.arange(sim_params['t_start'], sim_params['t_stop'] + bin_width_s, bin_width_s)
-            counts, _ = np.histogram(total_events, bins=bins)
-
-            mvt_res = run_mvt_in_subprocess(
-                            counts=counts,
-                            bin_width_s=bin_width_s,
-                            haar_python_path=haar_python_path
-                        )
-            plt.close('all')
-            mvt_val = float(mvt_res[2]) * 1000
-            mvt_err = float(mvt_res[3]) * 1000
-
-
-            iter_detail = {**base_iter_detail,
-                            'analysis_bin_width_ms': bin_width_ms,
-                            'mvt_ms': round(mvt_val, 4),
-                            'mvt_err_ms': round(mvt_err, 4),
-                            **base_params}
-            iteration_results.append(iter_detail)
-
-        except Exception as e:
-            logging.warning(f"Failed analysis on realization {i} in {src_event_files[0].name}. Error: {e}")
-            iteration_results.append({'iteration': i + 1,
-                                            'random_seed': sim_params['random_seed'] + i,
-                                            'analysis_bin_width_ms': bin_width_ms,
-                                            'mvt_ms': -100,
-                                            'mvt_err_ms': -200,
-                                            'back_avg_cps': -100,
-                                            'bkgd_counts': -100,
-                                            'src_counts': -100,
-                                            'S_flu': -100,
-                                            **base_params,
-                                            **snr_dict})
-    return iteration_results, NN
-
-
-
-
-
 def Function_MVT_analysis_complex(input_info: Dict, output_info: Dict):
     """
     Performs MVT analysis by assembling a pre-generated template and feature,
@@ -1184,6 +1172,298 @@ def Function_MVT_analysis_complex(input_info: Dict, output_info: Dict):
 
 
 
+
+
+def Function_MVT_analysis_complex_time_resolved(input_info: Dict, output_info: Dict):
+    """
+    Performs MVT analysis by assembling a pre-generated template and feature,
+    and calculates a detailed breakdown of source counts and SNR for each component.
+    """
+    base_params = input_info['base_params']
+    analysis_settings = input_info['analysis_settings']
+    sim_params = input_info['sim_par_file']
+    template_dir_path = input_info['sim_data_path']
+    data_path_root = template_dir_path.parents[2]
+    bin_width_ms = input_info['bin_width_ms']
+    haar_python_path = input_info['haar_python_path']
+    feature_amplitude = base_params['peak_amplitude']
+    position_shift = base_params['position']
+    extra_pulse_config = analysis_settings.get('extra_pulse')
+    feature_shape = extra_pulse_config.get('pulse_shape')
+    feature_params_for_naming = { 'peak_amplitude': feature_amplitude, **{k: v for k, v in extra_pulse_config.items() if k != 'pulse_shape'} }
+    feature_dir_name = _create_param_directory_name('function', feature_shape, feature_params_for_naming)
+    feature_dir_path = data_path_root / 'function' / feature_shape / feature_dir_name
+
+    # --- 2. Extract MVT time window and step size from analysis settings ---
+    mvt_time_window = analysis_settings.get('mvt_time_window', 1.0)
+    mvt_step_size = analysis_settings.get('mvt_step_size', 0.5)
+
+    # --- 3. Load event data (Unchanged) ---
+    try:
+        template_src_data = np.load(list(template_dir_path.glob('*_src.npz'))[0], allow_pickle=True)
+        template_bkgd_data = np.load(list(template_dir_path.glob('*_bkgd.npz'))[0], allow_pickle=True)
+        feature_src_data = np.load(list(feature_dir_path.glob('*_src.npz'))[0], allow_pickle=True)
+        template_realizations = template_src_data['realizations']
+        background_realizations = template_bkgd_data['realizations']
+        feature_realizations = feature_src_data['realizations']
+    except (FileNotFoundError, IndexError) as e:
+        logging.error(f"Error loading source/background files for assembly: {e}")
+        return [], 0
+
+    # --- 4. Main Analysis Loop ---
+    NN_analysis = base_params.get('num_analysis', len(template_realizations))
+    duration = sim_params['t_stop'] - sim_params['t_start']
+    snr_timescales = analysis_settings.get('snr_timescales', [])
+    iteration_results = []
+    MVT_time_resolved_results = []
+    first_realization_events = {}
+    
+    for i in range(NN_analysis):
+        try:
+            # --- 5. Assemble the pulse for this realization ---
+            template_events = template_realizations[i]
+            feature_events = feature_realizations[i]
+            background_events = background_realizations[i]
+            shifted_feature_events = feature_events + position_shift
+            complete_src_events = np.sort(np.concatenate([template_events, shifted_feature_events]))
+            total_events = np.sort(np.concatenate([complete_src_events, background_events]))
+            # --- NEW: Save the event data from the first run ---
+            if i == 0:
+                first_realization_events['source'] = complete_src_events
+                first_realization_events['background'] = background_events
+            
+            background_level_cps = len(background_events) / duration
+
+            ## ================== FULL METRIC CALCULATIONS ==================
+            # 1. Fluence SNR for each component
+            src_counts_total = len(complete_src_events)
+            bkgd_counts_total_window = background_level_cps * duration
+            S_flu_total = src_counts_total / np.sqrt(bkgd_counts_total_window) if bkgd_counts_total_window > 0 else 0
+            src_counts_template = len(template_events)
+            S_flu_template = src_counts_template / np.sqrt(bkgd_counts_total_window) if bkgd_counts_total_window > 0 else 0
+            src_counts_feature = len(shifted_feature_events)
+            
+            # --- 1a. SNR of Feature (using AVERAGE background+template rate) ---
+            combined_bkgd_avg_cps = (len(background_events) + len(template_events)) / duration
+            feature_params_for_interval = {**feature_params_for_naming, 'pulse_shape': feature_shape}
+            feat_t_start_relative, feat_t_stop_relative = calculate_src_interval(feature_params_for_interval)
+            feature_duration = feat_t_stop_relative - feat_t_start_relative
+            bkgd_in_feature_window_avg = combined_bkgd_avg_cps * feature_duration
+            S_flu_feature_avg = src_counts_feature / np.sqrt(bkgd_in_feature_window_avg) if bkgd_in_feature_window_avg > 0 else 0
+
+            # --- 1b. SNR of Feature (using LOCAL background+template counts) ---
+            feature_t_start = feat_t_start_relative + position_shift
+            feature_t_stop = feat_t_stop_relative + position_shift
+            template_counts_in_window = np.sum((template_events >= feature_t_start) & (template_events <= feature_t_stop))
+            bkgd_counts_in_window = np.sum((background_events >= feature_t_start) & (background_events <= feature_t_stop))
+            bkgd_counts_feature_local = template_counts_in_window + bkgd_counts_in_window
+            S_flu_feature_local = src_counts_feature / np.sqrt(bkgd_counts_feature_local) if bkgd_counts_feature_local > 0 else 0
+            
+            # 2. Multi-timescale SNR for each component
+            # --- 2a. Multi-timescale SNR for TOTAL pulse ---
+            total_counts_fine, _ = np.histogram(total_events, bins=int(duration / 0.001))
+            snr_dict_total = _calculate_multi_timescale_snr(total_counts=total_counts_fine, sim_bin_width=0.001, back_avg_cps=background_level_cps, search_timescales=snr_timescales)
+            
+            # --- 2b. Multi-timescale SNR for TEMPLATE pulse ---
+            template_plus_bkgd_events = np.sort(np.concatenate([template_events, background_events]))
+            template_counts_fine, _ = np.histogram(template_plus_bkgd_events, bins=int(duration / 0.001))
+            snr_dict_template = _calculate_multi_timescale_snr(total_counts=template_counts_fine, sim_bin_width=0.001, back_avg_cps=background_level_cps, search_timescales=snr_timescales)
+
+            # --- 2c. Multi-timescale SNR for FEATURE pulse ---
+            # For this, the "signal" is the feature, and the "background" is the template+sky.
+            # We use total_counts_fine (which includes all 3 components) and the combined average background rate.
+            snr_dict_feature = _calculate_multi_timescale_snr(total_counts=total_counts_fine, sim_bin_width=0.001, back_avg_cps=combined_bkgd_avg_cps, search_timescales=snr_timescales)
+            
+            ## =============================================================
+            
+            # Rename SNR dictionary keys to be unique before merging
+            final_snr_dict = {f'{k}_total': v for k, v in snr_dict_total.items()}
+            final_snr_dict.update({f'{k}_template': v for k, v in snr_dict_template.items()})
+            final_snr_dict.update({f'{k}_feature': v for k, v in snr_dict_feature.items()})
+
+            base_iter_detail = {
+                'iteration': i + 1, 'random_seed': sim_params['random_seed'] + i, 'back_avg_cps': round(background_level_cps, 2),
+                'src_counts_total': src_counts_total, 'bkgd_counts': len(background_events),
+                'src_counts_template': src_counts_template, 'src_counts_feature': src_counts_feature,
+                'bkgd_counts_feature_local': bkgd_counts_feature_local, # <-- New Metric
+                'S_flu_total': round(S_flu_total, 2), 'S_flu_template': round(S_flu_template, 2),
+                'S_flu_feature_avg': round(S_flu_feature_avg, 2), 'S_flu_feature_local': round(S_flu_feature_local, 2),
+                **final_snr_dict
+            }
+
+            
+            if i == 1:
+                create_final_plot(source_events=complete_src_events, background_events=background_events, model_info={ 'func': None, 'func_par': None, 'base_params': sim_params, 'snr_analysis': snr_timescales }, output_info=output_info)
+
+            # --- MVT on the Assembled Pulse ---
+            bin_width_s = bin_width_ms / 1000.0
+            bins = np.arange(sim_params['t_start'], sim_params['t_stop'] + bin_width_s, bin_width_s)
+            counts, _ = np.histogram(total_events, bins=bins)
+            mvt_res = run_mvt_in_subprocess(counts=counts, bin_width_s=bin_width_s, haar_python_path=haar_python_path, time_resolved=True, window_size_s=mvt_time_window, step_size_s=mvt_step_size)
+            
+            #mvt_val = float(mvt_res[2]) * 1000 if mvt_res else -100
+            #mvt_err = float(mvt_res[3]) * 1000 if mvt_res else -200
+
+            iteration_results.append({ **base_iter_detail, 'analysis_bin_width_ms': bin_width_ms, **base_params})
+            MVT_time_resolved_results.append(mvt_res)
+
+        except Exception as e:
+            logging.warning(f"Failed analysis on realization {i}. Error: {e}")
+            iteration_results.append({'iteration': i + 1, **base_params})
+            #MVT_time_resolved_results.append(None)
+    
+    # --- NEW: Call the dedicated analysis function ---
+    mvt_summary_df = analysis_mvt_time_resolved_results_to_dataframe(
+        mvt_results=MVT_time_resolved_results,
+        output_info=output_info, # Pass the dict containing path, name, etc.
+        bin_width_ms=bin_width_ms,
+        total_runs=NN_analysis
+    )
+
+    # --- NEW: Call the final plotting function AFTER the loop ---
+    if first_realization_events:
+        # Define the output filename for the plot data
+        plot_data_filename = output_info['file_path'] / f"plot_data_{output_info['file_info']}.npz"
+        
+        # Prepare the model_info dictionary with all necessary info
+        model_info_for_plot = {
+            'base_params': sim_params,
+            'mvt_window_size_s': analysis_settings.get('mvt_window_size_s', 1.0)
+        }
+
+        # Save all components to a single compressed .npz file
+        np.savez_compressed(
+            plot_data_filename,
+            source_events=first_realization_events['source'],
+            background_events=first_realization_events['background'],
+            model_info=model_info_for_plot,
+            output_info=output_info,
+            # Convert DataFrame to a dict for robust saving in .npz
+            mvt_summary_df=mvt_summary_df.to_dict(orient='list'),
+        )
+        logging.info(f"Plotting data saved to {plot_data_filename}")
+        create_final_plot_with_MVT(
+            source_events=first_realization_events['source'],
+            background_events=first_realization_events['background'],
+            model_info={'base_params': sim_params}, # Pass sim_params for plot settings
+            output_info=output_info,
+            mvt_summary_df=mvt_summary_df # Pass the final MVT summary
+        )
+
+    return iteration_results, mvt_summary_df, NN_analysis
+
+
+
+def analysis_mvt_time_resolved_results_to_dataframe(
+    mvt_results: List[List[Dict]],
+    output_info: Dict[str, any],
+    bin_width_ms: float,
+    total_runs: int
+) -> pd.DataFrame:
+    """
+    Analyzes a collection of time-resolved MVT results from multiple simulations.
+
+    This function flattens the nested data, groups it by time, calculates
+    MVT statistics (median, C.I.) for each time step, generates distribution
+    plots for each step, and returns a final summary DataFrame.
+
+    Args:
+        mvt_results (List[List[Dict]]): The nested list of MVT results.
+        output_info (Dict[str, any]): A dictionary containing output metadata:
+            - 'output_path' (Path): The directory to save results.
+            - 'param_dir_name' (str): The name of the simulation parameter set.
+            - 'selection_str' (str): The detector selection string for file naming.
+        bin_width_ms (float): The bin width used in the analysis in milliseconds.
+        total_runs (int): The total number of simulation iterations (NN_analysis).
+
+    Returns:
+        pd.DataFrame: A DataFrame summarizing the MVT statistics for each time step.
+    """
+    # --- Step 1: Flatten the nested MVT data into a single list ---
+    flat_mvt_data = []
+    for run_index, run_results in enumerate(mvt_results):
+        if run_results:  # Check if the run was successful
+            for time_window_result in run_results:
+                time_window_result['run_index'] = run_index
+                flat_mvt_data.append(time_window_result)
+
+    if not flat_mvt_data:
+        logging.warning(f"MVT analysis produced no valid data points for {output_info['file_info']}.")
+        return pd.DataFrame() # Return an empty DataFrame
+
+    mvt_df = pd.DataFrame(flat_mvt_data)
+    
+    # Save the raw, flattened data for detailed inspection
+    flat_csv_path = output_info['file_path'] / f"Detailed_MVT_flat_{output_info['file_info']}_default_{bin_width_ms}ms.csv"
+    mvt_df.to_csv(flat_csv_path, index=False)
+
+    # --- Step 2: Group by each time step and calculate statistics ---
+    time_resolved_summary = []
+    for center_time, group in mvt_df.groupby('center_time_s'):
+        valid_mvts = group[group['mvt_err_s'] > 0]
+
+        if len(valid_mvts) < 2:
+            continue # Skip if there are not enough valid runs for statistics
+
+        # --- BUG FIX ---
+        # The MVT is in the 'mvt_s' column. Convert to 'ms' for stats and plotting.
+        start_time = valid_mvts['start_time_s'].mean()
+        end_time = valid_mvts['end_time_s'].mean()
+
+        mvt_values_ms = valid_mvts['mvt_s'] * 1000
+        p16, median_mvt, p84 = np.percentile(mvt_values_ms, [16, 50, 84])
+        
+        # --- Create a distribution plot for THIS time step ---
+        try:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            # Use all positive MVT values for the background distribution
+            all_positive_runs_ms = group[group['mvt_s'] > 0]['mvt_s'] * 1000
+            
+            if not all_positive_runs_ms.empty:
+                 ax.hist(all_positive_runs_ms, bins=30, density=True,
+                         label=f'All Runs w/ MVT > 0 ({len(all_positive_runs_ms)}/{total_runs})',
+                         color='gray', alpha=0.5)
+
+            ax.hist(mvt_values_ms, bins=30, density=True,
+                    label=f'Valid Runs w/ Err > 0 ({len(valid_mvts)}/{total_runs})',
+                    color='steelblue', edgecolor='black')
+
+            ax.axvline(median_mvt, color='firebrick', linestyle='-', lw=2,
+                       label=f"Median = {median_mvt:.3f} ms")
+            ax.axvspan(p16, p84, color='darkorange', alpha=0.2,
+                       label=f"68% C.I. [{p16:.3f}, {p84:.3f}]")
+
+            ax.set_title(f"MVT Distribution for {output_info['file_info']}\nTime Step: {center_time:.2f} s | Bin Width: {bin_width_ms} ms")
+            ax.set_xlabel("Minimum Variability Timescale (ms)")
+            ax.set_ylabel("Probability Density")
+            ax.legend()
+            fig.tight_layout()
+
+            plot_filename = f"MVT_dist_{output_info['file_info']}_default_{bin_width_ms}ms_T{center_time:.2f}s.png"
+            plt.savefig(output_info['file_path'] / plot_filename, dpi=150)
+            plt.close(fig)
+
+        except Exception as e:
+            logging.error(f"Error creating MVT distribution plot for time {center_time}s: {e}")
+
+        time_resolved_summary.append({
+            'center_time_s': center_time,
+            'start_time_s': start_time,
+            'end_time_s': end_time,
+            'median_mvt_ms': round(median_mvt, 4),
+            'mvt_err_lower_ms': round(median_mvt - p16, 4),
+            'mvt_err_upper_ms': round(p84 - median_mvt, 4),
+            'successful_runs': len(valid_mvts),
+            'total_runs_at_step': len(group),
+            'failed_runs': len(group) - len(valid_mvts),
+        })
+
+    final_MVT_csv_path = output_info['file_path'] / f"MVT_{output_info['file_info']}_default_{bin_width_ms}ms.csv"
+    time_resolved_summary_df = pd.DataFrame(time_resolved_summary)
+    time_resolved_summary_df.to_csv(final_MVT_csv_path, index=False)
+
+    return time_resolved_summary_df
 
 
 
